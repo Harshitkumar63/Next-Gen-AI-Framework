@@ -1,0 +1,1354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Autonomous D2C Operations & Resolution Agent — Prototype</title>
+    
+    <!-- Fonts & Icons -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --bg-dark: #0a0b10;
+            --panel-bg: rgba(20, 22, 32, 0.7);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --text-primary: #f3f4f6;
+            --text-secondary: #9ca3af;
+            --text-muted: #6b7280;
+            --accent-primary: #6366f1; /* Indigo */
+            --accent-glow: rgba(99, 102, 241, 0.15);
+            --accent-success: #10b981; /* Emerald */
+            --accent-warning: #f59e0b; /* Amber */
+            --accent-danger: #ef4444; /* Rose */
+            --font-display: 'Plus Jakarta Sans', sans-serif;
+            --font-body: 'Outfit', sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-primary);
+            font-family: var(--font-body);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            background-image: 
+                radial-gradient(circle at 15% 15%, rgba(99, 102, 241, 0.08) 0%, transparent 40%),
+                radial-gradient(circle at 85% 85%, rgba(16, 185, 129, 0.06) 0%, transparent 40%);
+        }
+
+        /* Header Styling */
+        header {
+            padding: 16px 24px;
+            background: rgba(10, 11, 16, 0.6);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px border var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .header-logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-logo .bot-icon {
+            font-size: 28px;
+            background: linear-gradient(135deg, var(--accent-primary), #a855f7);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 2px 8px var(--accent-glow));
+        }
+
+        .header-logo h1 {
+            font-family: var(--font-display);
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            background: linear-gradient(to right, #ffffff, #d1d5db);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-logo span {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            background: rgba(99, 102, 241, 0.15);
+            color: #a5b4fc;
+            padding: 4px 8px;
+            border-radius: 6px;
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            font-weight: 600;
+        }
+
+        .system-status {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            font-size: 13px;
+        }
+
+        .status-pill {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: rgba(16, 185, 129, 0.1);
+            color: #34d399;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-weight: 500;
+            border: 1px solid rgba(16, 185, 129, 0.15);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--accent-success);
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+
+        /* Main Workspace Container */
+        .workspace {
+            display: flex;
+            flex: 1;
+            height: calc(100vh - 65px);
+            overflow: hidden;
+        }
+
+        /* Panels Shared Layout */
+        .panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            overflow: hidden;
+            background: var(--panel-bg);
+            backdrop-filter: blur(20px);
+        }
+
+        .panel-a {
+            border-right: 1px solid var(--border-color);
+        }
+
+        .panel-header-desc {
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(255, 255, 255, 0.01);
+        }
+
+        .panel-header-desc h2 {
+            font-family: var(--font-display);
+            font-size: 18px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .panel-header-desc p {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-top: 4px;
+        }
+
+        .panel-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* Left Panel Specifics */
+        .channel-selector {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .label {
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-secondary);
+        }
+
+        select, textarea {
+            background: rgba(10, 11, 16, 0.5);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 12px;
+            border-radius: 8px;
+            font-family: var(--font-body);
+            font-size: 14px;
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        select:focus, textarea:focus {
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 0 3px var(--accent-glow);
+        }
+
+        /* Scenarios Grid */
+        .scenarios-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+        }
+
+        .scenario-card {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border-color);
+            padding: 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            text-align: left;
+            transition: all 0.2s;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .scenario-card:hover {
+            background: rgba(99, 102, 241, 0.05);
+            border-color: rgba(99, 102, 241, 0.3);
+        }
+
+        .scenario-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .scenario-desc {
+            font-size: 11px;
+            color: var(--text-muted);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        /* Input Area & Submit */
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        textarea {
+            resize: none;
+            height: 90px;
+        }
+
+        .btn-submit {
+            background: linear-gradient(135deg, var(--accent-primary), #4f46e5);
+            color: #ffffff;
+            border: none;
+            padding: 14px;
+            border-radius: 8px;
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+
+        .btn-submit:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(99, 102, 241, 0.4);
+        }
+
+        .btn-submit:active {
+            transform: translateY(1px);
+        }
+
+        .chat-divider {
+            border-top: 1px solid var(--border-color);
+            margin: 10px 0;
+        }
+
+        /* Chat History Display */
+        .chat-container {
+            border: 1px solid var(--border-color);
+            background: rgba(10, 11, 16, 0.4);
+            border-radius: 12px;
+            flex: 1;
+            min-height: 200px;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-header {
+            padding: 10px 16px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(255, 255, 255, 0.02);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .chat-history {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .chat-empty {
+            margin: auto;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
+        .message {
+            display: flex;
+            gap: 12px;
+            max-width: 85%;
+            animation: fadeIn 0.3s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .message.user {
+            align-self: flex-end;
+            flex-direction: row-reverse;
+        }
+
+        .message.assistant {
+            align-self: flex-start;
+        }
+
+        .avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            font-weight: 600;
+            flex-shrink: 0;
+        }
+
+        .message.user .avatar {
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid var(--border-color);
+        }
+
+        .message.assistant .avatar {
+            background: rgba(99, 102, 241, 0.15);
+            border: 1px solid rgba(99, 102, 241, 0.2);
+            color: #a5b4fc;
+        }
+
+        .message-bubble {
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--border-color);
+            padding: 12px 16px;
+            border-radius: 12px;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .message.user .message-bubble {
+            background: rgba(99, 102, 241, 0.1);
+            border-color: rgba(99, 102, 241, 0.2);
+        }
+
+        .message.assistant .message-bubble {
+            background: rgba(20, 22, 32, 0.8);
+        }
+
+        /* Right Panel: Operations tabs */
+        .tabs {
+            display: flex;
+            border-bottom: 1px solid var(--border-color);
+            background: rgba(255, 255, 255, 0.01);
+            padding: 0 16px;
+        }
+
+        .tab-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            padding: 16px 20px;
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-primary);
+        }
+
+        .tab-btn.active {
+            color: var(--accent-primary);
+        }
+
+        .tab-btn.active::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 20px;
+            right: 20px;
+            height: 2px;
+            background-color: var(--accent-primary);
+            box-shadow: 0 0 8px var(--accent-primary);
+        }
+
+        .tab-content {
+            display: none;
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+        }
+
+        .tab-content.active {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        /* Approval Queue Styling */
+        .queue-empty {
+            margin: auto;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
+        .ticket-card {
+            background: rgba(239, 68, 68, 0.03);
+            border: 1px solid rgba(239, 68, 68, 0.15);
+            padding: 20px;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            animation: slideIn 0.3s ease-out;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(-10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .ticket-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .ticket-title {
+            font-family: var(--font-display);
+            font-size: 15px;
+            font-weight: 600;
+        }
+
+        .badge-risk {
+            font-size: 11px;
+            font-weight: 700;
+            padding: 4px 8px;
+            border-radius: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .badge-risk.high {
+            background: rgba(239, 68, 68, 0.15);
+            color: #fda4af;
+            border: 1px solid rgba(239, 68, 68, 0.25);
+        }
+
+        .ticket-info {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            font-size: 12px;
+            background: rgba(10, 11, 16, 0.3);
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        .info-item span:first-child {
+            color: var(--text-muted);
+            display: block;
+            margin-bottom: 2px;
+        }
+
+        .info-item span:last-child {
+            font-weight: 600;
+        }
+
+        .ticket-flags {
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .ticket-flags strong {
+            color: #fda4af;
+        }
+
+        .ticket-actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        .btn-action {
+            flex: 1;
+            padding: 10px 16px;
+            border-radius: 6px;
+            font-family: var(--font-display);
+            font-weight: 600;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+        }
+
+        .btn-action.approve {
+            background: var(--accent-success);
+            color: #ffffff;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+        }
+
+        .btn-action.approve:hover {
+            opacity: 0.9;
+        }
+
+        .btn-action.reject {
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-action.reject:hover {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: rgba(239, 68, 68, 0.2);
+            color: #fda4af;
+        }
+
+        /* Agent Trace Timeline */
+        .timeline {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .trace-card {
+            background: rgba(255, 255, 255, 0.01);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .trace-card-header {
+            padding: 12px 16px;
+            background: rgba(255, 255, 255, 0.02);
+            font-size: 13px;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+            cursor: pointer;
+        }
+
+        .trace-card-body {
+            padding: 16px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .step-item {
+            font-size: 12px;
+            font-family: monospace;
+            color: #a5b4fc;
+            padding-left: 14px;
+            position: relative;
+        }
+
+        .step-item::before {
+            content: '•';
+            position: absolute;
+            left: 0;
+            color: var(--accent-primary);
+        }
+
+        .trace-notes {
+            margin-top: 6px;
+            border-top: 1px dashed var(--border-color);
+            padding-top: 8px;
+        }
+
+        .note-item {
+            font-size: 11px;
+            color: var(--text-secondary);
+            font-style: italic;
+        }
+
+        /* System Logs Tab */
+        .logs-section {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .logs-section-title {
+            font-size: 13px;
+            font-weight: 600;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            letter-spacing: 0.5px;
+        }
+
+        .log-list {
+            background: rgba(10, 11, 16, 0.3);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 12px;
+            max-height: 250px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .log-entry {
+            font-size: 11px;
+            padding: 8px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .log-entry:last-child {
+            border: none;
+        }
+
+        .log-entry-main {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .log-id {
+            font-family: monospace;
+            font-weight: 600;
+            color: #a5b4fc;
+        }
+
+        .log-detail {
+            color: var(--text-secondary);
+        }
+
+        .log-time {
+            color: var(--text-muted);
+            align-self: center;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="header-logo">
+            <div class="bot-icon">🤖</div>
+            <h1>Autonomous D2C Agent</h1>
+            <span>Command Center</span>
+        </div>
+        <div class="system-status">
+            <div class="status-pill">
+                <div class="status-dot"></div>
+                Agent System Online
+            </div>
+            <div style="font-size: 12px; color: var(--text-muted);">
+                Thread Context: <span id="thread-id-display" style="font-family: monospace; color: var(--text-secondary);">Idle</span>
+            </div>
+        </div>
+    </header>
+
+    <div class="workspace">
+        <!-- Panel A: Customer Simulator -->
+        <div class="panel panel-a">
+            <div class="panel-header-desc">
+                <h2>🎧 Panel A — Customer Simulator</h2>
+                <p>Submit support tickets and view agent responses in real time</p>
+            </div>
+            <div class="panel-content">
+                <!-- Channel & Settings -->
+                <div class="channel-selector">
+                    <span class="label">📱 Communication Channel</span>
+                    <select id="channel-select">
+                        <option value="Web Chat">Web Chat (Direct & Inline)</option>
+                        <option value="Email">Email (Formal & Structured)</option>
+                        <option value="WhatsApp">WhatsApp (Short, Informal & Emojis)</option>
+                    </select>
+                </div>
+
+                <!-- Test Scenarios -->
+                <div class="input-group">
+                    <span class="label">⚡ Quick Test Scenarios</span>
+                    <div class="scenarios-grid">
+                        <button class="scenario-card" onclick="loadScenario('delivered_not_received')">
+                            <span class="scenario-title">🚫 Delivered Not Received</span>
+                            <span class="scenario-desc">Order #1004 DHL anomaly</span>
+                        </button>
+                        <button class="scenario-card" onclick="loadScenario('high_risk_refund')">
+                            <span class="scenario-title">🔴 High-Risk Refund</span>
+                            <span class="scenario-desc">Order #1002 Return rate 45%</span>
+                        </button>
+                        <button class="scenario-card" onclick="loadScenario('delayed_shipment')">
+                            <span class="scenario-title">⏳ Delayed Shipment</span>
+                            <span class="scenario-desc">Order #1005 stuck in Memphis</span>
+                        </button>
+                        <button class="scenario-card" onclick="loadScenario('high_value_refund')">
+                            <span class="scenario-title">💸 High-Value Refund</span>
+                            <span class="scenario-desc">Order #1003 Cancel ($249.99)</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Text Area Input -->
+                <div class="input-group">
+                    <span class="label">✍️ Customer Message</span>
+                    <textarea id="complaint-input" placeholder="e.g. My order #1004 says delivered but I haven't received it!"></textarea>
+                    <button class="btn-submit" onclick="submitTicket()">🚀 Submit Ticket</button>
+                </div>
+
+                <div class="chat-divider"></div>
+
+                <!-- Simulated Chat History -->
+                <div class="chat-container">
+                    <div class="chat-header">
+                        <span>💬 Chat History</span>
+                        <span id="chat-channel-status" style="font-weight: 500;">No Active Session</span>
+                    </div>
+                    <div class="chat-history" id="chat-history">
+                        <div class="chat-empty" id="chat-empty">
+                            Submit a scenario above or write a custom message to begin graph execution
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Panel B: Operations Queue & Trace Logs -->
+        <div class="panel panel-b">
+            <div class="panel-header-desc">
+                <h2>🏢 Panel B — Operations & HITL Control Center</h2>
+                <p>Monitor the multi-agent thought process and resolve human escalations</p>
+            </div>
+            
+            <div class="tabs">
+                <button class="tab-btn active" onclick="switchTab('queue')">🔴 Approval Queue <span id="queue-count" style="display:none; font-size:10px; background:var(--accent-danger); color:white; padding:2px 6px; border-radius:10px; margin-left:4px;">0</span></button>
+                <button class="tab-btn" onclick="switchTab('trace')">🧠 Agent Trace</button>
+                <button class="tab-btn" onclick="switchTab('logs')">📊 System Logs</button>
+            </div>
+
+            <!-- TAB 1: HITL Approval Queue -->
+            <div class="tab-content active" id="tab-queue">
+                <div class="queue-empty" id="queue-empty">
+                    ✅ No tickets currently awaiting manager approval.
+                </div>
+                <div id="active-approval-ticket" style="display: none;">
+                    <div class="ticket-card">
+                        <div class="ticket-card-header">
+                            <div class="ticket-title" id="t-order-title">Ticket Escalation: Order #1002</div>
+                            <span class="badge-risk high">High Risk</span>
+                        </div>
+                        <div class="ticket-info">
+                            <div class="info-item">
+                                <span>Customer</span>
+                                <span id="t-customer-id">CUST-302</span>
+                            </div>
+                            <div class="info-item">
+                                <span>Order Value</span>
+                                <span id="t-amount">$89.99</span>
+                            </div>
+                            <div class="info-item">
+                                <span>Issue Category</span>
+                                <span id="t-issue">return_request</span>
+                            </div>
+                        </div>
+                        <div class="ticket-flags">
+                            🚩 <strong>Risk Flags Triggered:</strong> <span id="t-reasons">Lifetime return rate exceeds threshold</span>
+                        </div>
+                        <div class="ticket-actions">
+                            <button class="btn-action approve" onclick="hitlDecision('approved')">✅ Approve Refund</button>
+                            <button class="btn-action reject" onclick="hitlDecision('rejected')">❌ Reject / Block</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 2: Agent Thought Process Timeline -->
+            <div class="tab-content" id="tab-trace">
+                <div class="queue-empty" id="trace-empty">
+                    No active agent graph runs found.
+                </div>
+                <div id="trace-timeline" class="timeline" style="display: none;">
+                    <div class="trace-card">
+                        <div class="trace-card-header">
+                            <span>🔍 LangGraph Mindmap Trace (Stateful Node Transition)</span>
+                            <span id="trace-ticket-id" style="font-family: monospace; color: var(--text-muted);">ticket-1</span>
+                        </div>
+                        <div class="trace-card-body">
+                            <div id="trace-steps-container" style="display: flex; flex-direction: column; gap: 8px;">
+                                <!-- Dynamically added steps -->
+                            </div>
+                            <div class="trace-notes">
+                                <span class="label" style="font-size: 10px;">Internal Scratchpad Notes</span>
+                                <div id="trace-notes-container" style="display: flex; flex-direction: column; gap: 4px; margin-top: 4px;">
+                                    <!-- Notes -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TAB 3: System Logs (Disputes & Refunds) -->
+            <div class="tab-content" id="tab-logs">
+                <div class="logs-section">
+                    <span class="logs-section-title">🚨 Carrier Disputes Filed (/api/logistics/dispute)</span>
+                    <div class="log-list" id="disputes-log-list">
+                        <div style="font-size:12px; color:var(--text-muted); text-align:center; margin:auto;">No disputes filed in this session.</div>
+                    </div>
+                </div>
+                <div class="logs-section">
+                    <span class="logs-section-title">💰 Refunds Processed (/api/shopify/refund)</span>
+                    <div class="log-list" id="refunds-log-list">
+                        <div style="font-size:12px; color:var(--text-muted); text-align:center; margin:auto;">No refunds processed in this session.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripting Logic for Simulated LangGraph Engine -->
+    <script>
+        // Mock databases
+        const ORDERS_DB = {
+            "1001": {
+                order_id: "1001", customer_id: "CUST-201", email: "alice.johnson@email.com",
+                items: [{name: "Wireless Earbuds Pro", price: 49.99}], total: 49.99,
+                customer_metadata: { total_orders: 12, lifetime_return_rate: 0.05, risk_history_tags: [] }
+            },
+            "1002": {
+                order_id: "1002", customer_id: "CUST-302", email: "bob.serial.returner@email.com",
+                items: [{name: "Smart Watch Ultra", price: 89.99}], total: 89.99,
+                customer_metadata: { total_orders: 25, lifetime_return_rate: 0.45, risk_history_tags: ["frequent_returner"] }
+            },
+            "1003": {
+                order_id: "1003", customer_id: "CUST-403", email: "carol.bigspender@email.com",
+                items: [{name: "Noise Cancelling Headphones", price: 199.99}, {name: "Premium Carrying Case", price: 49.99}], total: 249.99,
+                customer_metadata: { total_orders: 8, lifetime_return_rate: 0.12, risk_history_tags: [] }
+            },
+            "1004": {
+                order_id: "1004", customer_id: "CUST-504", email: "dave.missing.delivery@email.com",
+                items: [{name: "Portable Bluetooth Speaker", price: 69.99}], total: 69.99,
+                customer_metadata: { total_orders: 15, lifetime_return_rate: 0.08, risk_history_tags: [] }
+            },
+            "1005": {
+                order_id: "1005", customer_id: "CUST-605", email: "eve.waiting@email.com",
+                items: [{name: "USB-C Hub Adapter", price: 34.99}], total: 69.98,
+                customer_metadata: { total_orders: 5, lifetime_return_rate: 0.20, risk_history_tags: [] }
+            },
+            "1006": {
+                order_id: "1006", customer_id: "CUST-706", email: "frank.rto@email.com",
+                items: [{name: "Mechanical Keyboard RGB", price: 129.99}], total: 129.99,
+                customer_metadata: { total_orders: 3, lifetime_return_rate: 0.33, risk_history_tags: ["address_mismatch"] }
+            }
+        };
+
+        const TRACKING_DB = {
+            "TRK-1001": { status: "Delivered", carrier: "FedEx", last_location: "Austin, TX — Front Door" },
+            "TRK-1002": { status: "Delivered", carrier: "UPS", last_location: "Portland, OR — Mailroom" },
+            "TRK-1003": { status: "In-Transit", carrier: "USPS", last_location: "Distribution Center — Reno, NV" },
+            "TRK-1004": { status: "Delivered", carrier: "DHL", last_location: "Denver, CO — Porch" },
+            "TRK-1005": { status: "Stuck-Delayed", carrier: "FedEx", last_location: "Sorting Facility — Memphis, TN (STUCK)" },
+            "TRK-1006": { status: "RTO", carrier: "UPS", last_location: "Return Facility — Atlanta, GA" }
+        };
+
+        const POLICIES = {
+            "delivery_not_received": { name: "Delivery Not Received — Investigation & Refund Policy", limit: 75.00 },
+            "damaged_item": { name: "Damaged Item — Return & Replacement Policy", limit: 50.00 },
+            "wrong_item": { name: "Wrong Item Received — Exchange Priority Policy", limit: 100.00 },
+            "late_delivery": { name: "Late Delivery — Shipping Credit Policy", limit: 25.00 },
+            "return_request": { name: "Standard Return — 30-Day Return Window Policy", limit: 75.00 },
+            "general_inquiry": { name: "General Customer Inquiry — Information Response", limit: 0.00 }
+        };
+
+        const SCENARIOS = {
+            "delivered_not_received": "My order #1004 says delivered but I haven't received it! I've checked everywhere and nothing. I want my money back immediately! This is unacceptable!",
+            "high_risk_refund": "I want a full refund for order #1002. The product is not what I expected and I demand my money back right now. This is ridiculous!",
+            "delayed_shipment": "Where is my order #1005?! It's been delayed for weeks and I'm still waiting. This is very frustrating. Can someone please help?",
+            "high_value_refund": "I need to return order #1003. The headphones are not working properly. I paid $250 for this and I expect a full refund. Please process this."
+        };
+
+        // UI Session States
+        let currentThreadId = null;
+        let threadCount = 0;
+        let disputesLog = [];
+        let refundsLog = [];
+        let activeSuspendedState = null; // Stored when graph hits interrupt()
+
+        function getTimestamp() {
+            const now = new Date();
+            return now.toTimeString().split(' ')[0];
+        }
+
+        // Tab Switching
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            // Add active classes
+            event.target.classList.add('active');
+            document.getElementById(`tab-${tab}`).classList.add('active');
+        }
+
+        // Load pre-configured scenario text
+        function loadScenario(key) {
+            document.getElementById('complaint-input').value = SCENARIOS[key];
+        }
+
+        // Parse complaints and run local JS LangGraph Orchestrator
+        function submitTicket() {
+            const text = document.getElementById('complaint-input').value.trim();
+            const channel = document.getElementById('channel-select').value;
+            
+            if (!text) {
+                alert("Please write or select a customer message first.");
+                return;
+            }
+
+            // Create thread context
+            threadCount++;
+            currentThreadId = `ticket-${threadCount}-${Math.random().toString(36).substring(2, 8)}`;
+            document.getElementById('thread-id-display').textContent = currentThreadId;
+            document.getElementById('chat-channel-status').textContent = `${channel} active`;
+
+            // Clear placeholder
+            const chatEmpty = document.getElementById('chat-empty');
+            if (chatEmpty) chatEmpty.style.display = 'none';
+
+            // Add user message
+            addChatMessage('user', `[${channel}] ${text}`);
+            
+            // Run Agent Logic
+            runAgentPipeline(text, channel);
+        }
+
+        function addChatMessage(role, text) {
+            const chatHistory = document.getElementById('chat-history');
+            const msg = document.createElement('div');
+            msg.className = `message ${role}`;
+            
+            msg.innerHTML = `
+                <div class="avatar">${role === 'user' ? '😤' : '🤖'}</div>
+                <div class="message-bubble">${text.replace(/\n/g, '<br>')}</div>
+            `;
+            
+            chatHistory.appendChild(msg);
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        // JavaScript Simulation of the LangGraph flow
+        function runAgentPipeline(complaint, channel) {
+            // Steps and Notes buffers
+            let steps = [];
+            let notes = [];
+
+            // ── NODE 1: TRIAGE ───────────────────────────────────────────────
+            steps.push(`[${getTimestamp()}] 🎯 TRIAGE: Ingested complaint via channel: ${channel}`);
+            
+            // Extract order number
+            const orderMatch = complaint.match(/#?(\d{4})/);
+            const order_id = orderMatch ? orderMatch[1] : null;
+            
+            if (!order_id) {
+                steps.push(`[${getTimestamp()}] ❌ TRIAGE: Failed to extract Order ID.`);
+                addChatMessage('assistant', "I'm sorry, I couldn't find an order number in your message. Could you please provide your 4-digit order ID?");
+                return;
+            }
+            
+            steps.push(`[${getTimestamp()}] 🔍 TRIAGE: Extracted Order ID: #${order_id}`);
+            
+            // Fetch Shopify Order Details
+            const order = ORDERS_DB[order_id];
+            if (!order) {
+                steps.push(`[${getTimestamp()}] ❌ TRIAGE: Order #${order_id} not found in database.`);
+                addChatMessage('assistant', `I was unable to find order #${order_id} in our shop records. Could you please double check the number?`);
+                return;
+            }
+            steps.push(`[${getTimestamp()}] 📦 TRIAGE: Retrieved Shopify order details. Customer ID: ${order.customer_id}. Amount: $${order.total}`);
+
+            // Classify Sentiment & Issue
+            let sentiment = "neutral";
+            if (complaint.match(/(unacceptable|worst|scam|money back|immediately)/i)) {
+                sentiment = "angry";
+            } else if (complaint.match(/(frustrated|waiting|stuck|delay)/i)) {
+                sentiment = "frustrated";
+            }
+            steps.push(`[${getTimestamp()}] 😤 TRIAGE: Sentiment classified as '${sentiment}'`);
+
+            let issue_type = "general_inquiry";
+            if (complaint.match(/(not received|never received|delivered but)/i)) {
+                issue_type = "delivery_not_received";
+            } else if (complaint.match(/(delayed|slow|where is)/i)) {
+                issue_type = "late_delivery";
+            } else if (complaint.match(/(refund|return|back my money)/i)) {
+                issue_type = "return_request";
+            }
+            steps.push(`[${getTimestamp()}] 📋 TRIAGE: Issue category determined as '${issue_type}'`);
+
+            // Policy Engine lookup
+            const policy = POLICIES[issue_type] || POLICIES["general_inquiry"];
+            steps.push(`[${getTimestamp()}] 📖 TRIAGE: Loaded policy rule: '${policy.name}'`);
+
+            // Route to next node
+            notes.push(`Triage complete. Routing to logistics for tracking verification.`);
+            
+            // ── NODE 2: LOGISTICS ──────────────────────────────────────────────
+            steps.push(`[${getTimestamp()}] 🚚 LOGISTICS: Querying carrier tracking database...`);
+            const tracking_id = `TRK-${order_id}`;
+            const tracking = TRACKING_DB[tracking_id];
+            
+            let disputeFiled = false;
+            if (tracking) {
+                steps.push(`[${getTimestamp()}] 📡 LOGISTICS: Carrier: ${tracking.carrier} | Status: ${tracking.status}`);
+                
+                if (issue_type === "delivery_not_received" && tracking.status === "Delivered") {
+                    // Anomaly detected!
+                    steps.push(`[${getTimestamp()}] 🚨 LOGISTICS: ANOMALY DETECTED! Tracking says Delivered but customer reports Not Received.`);
+                    steps.push(`[${getTimestamp()}] 🚨 LOGISTICS: Auto-filing carrier dispute. Requesting GPS & photo proof.`);
+                    
+                    const dispute_id = `DSP-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+                    disputeFiled = true;
+                    
+                    // Log to System Logs
+                    disputesLog.push({
+                        id: dispute_id,
+                        order_id: order_id,
+                        carrier: tracking.carrier,
+                        reason: "Delivery anomaly: tracking says Delivered but customer claims missing",
+                        time: getTimestamp()
+                    });
+                    updateLogsUI();
+                    
+                    steps.push(`[${getTimestamp()}] ✅ LOGISTICS: Carrier dispute ${dispute_id} filed successfully.`);
+                    notes.push(`Dispute ${dispute_id} filed. Response expected in 48h.`);
+                } else if (tracking.status === "Stuck-Delayed") {
+                    steps.push(`[${getTimestamp()}] ⏳ LOGISTICS: Confirmed package stuck at facility in ${tracking.last_location}`);
+                }
+            } else {
+                steps.push(`[${getTimestamp()}] ⚠️ LOGISTICS: No tracking available.`);
+            }
+
+            // ── NODE 3: FRAUD / RISK ASSESSMENT ─────────────────────────────────
+            steps.push(`[${getTimestamp()}] 🛡️ FRAUD: Starting risk scoring evaluation...`);
+            const rate = order.customer_metadata.lifetime_return_rate;
+            const flags = [];
+            
+            if (rate > 0.40) {
+                flags.push(`Lifetime return rate (${Math.round(rate*100)}%) exceeds risk threshold (40%)`);
+            }
+            if (order.total > policy.limit) {
+                flags.push(`Order amount ($${order.total}) exceeds auto-refund limit ($${policy.limit})`);
+            }
+            if (order.customer_metadata.risk_history_tags.length > 0) {
+                flags.push(`Historical risk tags found: ${order.customer_metadata.risk_history_tags.join(', ')}`);
+            }
+
+            const isHighRisk = flags.length > 0;
+            const riskScore = isHighRisk ? "HIGH" : "LOW";
+            steps.push(`[${getTimestamp()}] 📊 FRAUD: Risk assessment completed. Score: ${riskScore}`);
+            
+            if (isHighRisk) {
+                flags.forEach(flag => steps.push(`[${getTimestamp()}] 🚩 FRAUD: FLAG TRIGGERED — ${flag}`));
+                steps.push(`[${getTimestamp()}] 🔴 FRAUD: High Risk detected. Auto-refund BLOCKED. Escalating to human approval.`);
+                
+                // Suspended State storage for HITL
+                activeSuspendedState = {
+                    thread_id: currentThreadId,
+                    order_id: order_id,
+                    customer_id: order.customer_id,
+                    amount: order.total,
+                    issue: issue_type,
+                    flags: flags.join('; '),
+                    steps: [...steps],
+                    notes: [...notes],
+                    complaint: complaint,
+                    channel: channel,
+                    policy: policy,
+                    disputeFiled: disputeFiled
+                };
+
+                // Update UI for HITL Approval Queue
+                showApprovalCard(activeSuspendedState);
+                
+                // Render Trace so far
+                showTrace(activeSuspendedState);
+                
+                // Send chat notification to user
+                addChatMessage('assistant', `⏸️ **Ticket Escalated for Review**\n\nYour refund request for order #${order_id} has been paused for review by a manager due to our account verification protocols. A resolution team member will inspect this case shortly.`);
+                
+                return; // PAUSES GRAPH!
+            }
+
+            // ── NODE 5: FINANCIAL ADJUSTER (Auto route for low risk) ──────────────
+            steps.push(`[${getTimestamp()}] 💰 FINANCIAL: Processing order refund...`);
+            const refund_id = `RFN-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+            
+            // Log to System Logs
+            refundsLog.push({
+                id: refund_id,
+                order_id: order_id,
+                amount: order.total,
+                status: "COMPLETED",
+                time: getTimestamp()
+            });
+            updateLogsUI();
+
+            steps.push(`[${getTimestamp()}] ✅ FINANCIAL: Refund ${refund_id} approved for $${order.total}`);
+            steps.push(`[${getTimestamp()}] 📦 FINANCIAL: Restocked items back into warehouse inventory.`);
+            
+            // Generate response
+            const finalResponse = draftResponse(sentiment, channel, order_id, order.total, disputeFiled, issue_type);
+            steps.push(`[${getTimestamp()}] 📧 FINANCIAL: Drafting response tailored for ${channel}`);
+            steps.push(`[${getTimestamp()}] ✅ RESOLUTION COMPLETE: Ticket closed.`);
+
+            addChatMessage('assistant', finalResponse);
+
+            // Render Trace
+            showTrace({
+                thread_id: currentThreadId,
+                steps: steps,
+                notes: notes
+            });
+        }
+
+        // Resume execution after Human-in-the-Loop decision
+        function hitlDecision(decision) {
+            if (!activeSuspendedState) return;
+
+            let steps = [...activeSuspendedState.steps];
+            let notes = [...activeSuspendedState.notes];
+            const order_id = activeSuspendedState.order_id;
+            const amount = activeSuspendedState.amount;
+            const channel = activeSuspendedState.channel;
+            const issue_type = activeSuspendedState.issue;
+
+            steps.push(`[${getTimestamp()}] ▶️ HITL: Manager override decision received: '${decision.toUpperCase()}'`);
+
+            if (decision === 'approved') {
+                steps.push(`[${getTimestamp()}] 💰 FINANCIAL: Processing manager-approved refund...`);
+                const refund_id = `RFN-${Math.random().toString(36).substring(2, 10).toUpperCase()}`;
+                
+                // Log to System Logs
+                refundsLog.push({
+                    id: refund_id,
+                    order_id: order_id,
+                    amount: amount,
+                    status: "APPROVED_BY_MANAGER",
+                    time: getTimestamp()
+                });
+                updateLogsUI();
+
+                steps.push(`[${getTimestamp()}] ✅ FINANCIAL: Refund ${refund_id} completed successfully.`);
+                steps.push(`[${getTimestamp()}] 📦 FINANCIAL: Restocked items back to active stock.`);
+                
+                const finalResponse = draftResponse("neutral", channel, order_id, amount, activeSuspendedState.disputeFiled, issue_type);
+                addChatMessage('assistant', `✅ **Manager Decision: APPROVED**\n\n${finalResponse}`);
+            } else {
+                steps.push(`[${getTimestamp()}] ❌ FINANCIAL: Refund request REJECTED by manager overrides. Drafting rejection letter.`);
+                const finalResponse = draftRejection(channel, order_id);
+                addChatMessage('assistant', `❌ **Manager Decision: REJECTED**\n\n${finalResponse}`);
+            }
+
+            steps.push(`[${getTimestamp()}] ✅ RESOLUTION COMPLETE: Ticket closed after human audit.`);
+            
+            // Update Trace
+            showTrace({
+                thread_id: activeSuspendedState.thread_id,
+                steps: steps,
+                notes: notes
+            });
+
+            // Reset HITL state
+            hideApprovalCard();
+            activeSuspendedState = null;
+        }
+
+        function draftResponse(sentiment, channel, order_id, amount, disputeFiled, issue_type) {
+            let opener = "Thank you for contacting customer support. ";
+            if (sentiment === 'angry') {
+                opener = "I completely understand your frustration and sincerely apologize. We take your experience very seriously. ";
+            } else if (sentiment === 'frustrated') {
+                opener = "I'm very sorry for the inconvenience caused. Let me help make this right. ";
+            }
+
+            let body = `I have processed a full refund of **$${amount.toFixed(2)}** for order #${order_id}. You will see this back in your account in 3–5 business days.`;
+            
+            if (issue_type === "late_delivery") {
+                body = `I've applied a **$25.00 shipping credit** to your account as a gesture of goodwill due to the courier delay.`;
+            }
+
+            if (disputeFiled) {
+                body += `\n\nAdditionally, I have filed an investigation with our logistics provider demanding GPS coordinates and delivery pictures.`;
+            }
+
+            if (channel === 'WhatsApp') {
+                return `Hi! 👋\n\n${opener}\n\n${body}\n\nHope this helps! Reply if you need anything else!`;
+            } else if (channel === 'Email') {
+                return `Dear Valued Customer,\n\n${opener}\n\n${body}\n\nIf you have any further questions, please let us know by replying directly to this email.\n\nBest regards,\nCustomer Resolution Agent\nRef: #${order_id}`;
+            } else {
+                return `${opener}\n\n${body}\n\nIs there anything else I can assist you with today?`;
+            }
+        }
+
+        function draftRejection(channel, order_id) {
+            const text = `After careful assessment of your order #${order_id} history and details, we are unfortunately unable to process a refund at this time. This case does not meet the guidelines required for an automated refund.`;
+            if (channel === 'WhatsApp') {
+                return `Hi. ${text} Please contact our support team if you want to appeal this decision.`;
+            } else if (channel === 'Email') {
+                return `Dear Customer,\n\n${text}\n\nIf you believe this decision was made in error, you may reply to this email to escalate to our appeals department.\n\nSincerely,\nOperations Review Board`;
+            } else {
+                return `${text} If you have questions, please let me know.`;
+            }
+        }
+
+        // UI Helpers
+        function showApprovalCard(state) {
+            document.getElementById('queue-empty').style.display = 'none';
+            const card = document.getElementById('active-approval-ticket');
+            card.style.display = 'block';
+
+            document.getElementById('t-order-title').textContent = `Ticket Escalation: Order #${state.order_id}`;
+            document.getElementById('t-customer-id').textContent = state.customer_id;
+            document.getElementById('t-amount').textContent = `$${state.amount.toFixed(2)}`;
+            document.getElementById('t-issue').textContent = state.issue;
+            document.getElementById('t-reasons').textContent = state.flags;
+
+            // Badges count
+            const qCount = document.getElementById('queue-count');
+            qCount.style.display = 'inline';
+            qCount.textContent = '1';
+        }
+
+        function hideApprovalCard() {
+            document.getElementById('active-approval-ticket').style.display = 'none';
+            document.getElementById('queue-empty').style.display = 'block';
+            document.getElementById('queue-count').style.display = 'none';
+        }
+
+        function showTrace(state) {
+            document.getElementById('trace-empty').style.display = 'none';
+            const trace = document.getElementById('trace-timeline');
+            trace.style.display = 'block';
+
+            document.getElementById('trace-ticket-id').textContent = state.thread_id;
+            
+            const stepsContainer = document.getElementById('trace-steps-container');
+            stepsContainer.innerHTML = '';
+            state.steps.forEach(step => {
+                const s = document.createElement('div');
+                s.className = 'step-item';
+                s.textContent = step;
+                stepsContainer.appendChild(s);
+            });
+
+            const notesContainer = document.getElementById('trace-notes-container');
+            notesContainer.innerHTML = '';
+            if (state.notes && state.notes.length > 0) {
+                state.notes.forEach(note => {
+                    const n = document.createElement('div');
+                    n.className = 'note-item';
+                    n.textContent = `💡 ${note}`;
+                    notesContainer.appendChild(n);
+                });
+            } else {
+                notesContainer.innerHTML = '<div class="note-item">No notes.</div>';
+            }
+        }
+
+        function updateLogsUI() {
+            // Update Disputes
+            const dContainer = document.getElementById('disputes-log-list');
+            if (disputesLog.length === 0) {
+                dContainer.innerHTML = '<div style="font-size:12px; color:var(--text-muted); text-align:center; margin:auto;">No disputes filed in this session.</div>';
+            } else {
+                dContainer.innerHTML = '';
+                disputesLog.forEach(d => {
+                    const el = document.createElement('div');
+                    el.className = 'log-entry';
+                    el.innerHTML = `
+                        <div class="log-entry-main">
+                            <span class="log-id">${d.id} (Order #${d.order_id})</span>
+                            <span class="log-detail">Carrier: ${d.carrier} | ${d.reason}</span>
+                        </div>
+                        <span class="log-time">${d.time}</span>
+                    `;
+                    dContainer.appendChild(el);
+                });
+            }
+
+            // Update Refunds
+            const rContainer = document.getElementById('refunds-log-list');
+            if (refundsLog.length === 0) {
+                rContainer.innerHTML = '<div style="font-size:12px; color:var(--text-muted); text-align:center; margin:auto;">No refunds processed in this session.</div>';
+            } else {
+                rContainer.innerHTML = '';
+                refundsLog.forEach(r => {
+                    const el = document.createElement('div');
+                    el.className = 'log-entry';
+                    el.innerHTML = `
+                        <div class="log-entry-main">
+                            <span class="log-id">${r.id} (Order #${r.order_id})</span>
+                            <span class="log-detail">Amount: $${r.amount.toFixed(2)} | Status: <strong style="color:var(--accent-success)">${r.status}</strong></span>
+                        </div>
+                        <span class="log-time">${r.time}</span>
+                    `;
+                    rContainer.appendChild(el);
+                });
+            }
+        }
+    </script>
+</body>
+</html>
