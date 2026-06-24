@@ -54,6 +54,7 @@ def init_session_state():
         "graph": None,  # Compiled LangGraph instance
         "checkpointer": None,  # MemorySaver instance
         "processing": False,  # Prevent double-submit
+        "selected_scenario": None,  # Scenario text selected by button
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -446,19 +447,19 @@ with panel_a:
     }
 
     scenario_cols = st.columns(2)
-    selected_scenario = None
 
     for idx, (label, complaint) in enumerate(scenarios.items()):
         col = scenario_cols[idx % 2]
         with col:
             if st.button(label, key=f"scenario_{idx}", use_container_width=True):
-                selected_scenario = complaint
+                st.session_state.selected_scenario = complaint
+                st.session_state.complaint_area = complaint
+                st.rerun()
 
     # ── Custom Complaint Input ────────────────────────────────────────────
     st.markdown("**✍️ Or write a custom complaint:**")
     complaint_input = st.text_area(
         "Customer Message",
-        value=selected_scenario or "",
         height=120,
         placeholder=(
             "e.g., 'My order #1004 says delivered but I haven't received it! "
@@ -521,40 +522,35 @@ with panel_a:
             try:
                 result = st.session_state.graph.invoke(initial_state, config=config)
 
-                # Check if graph completed or paused (HITL)
-                if result.get("approval_status") == "pending" or result.get("approval_required"):
-                    # Graph hit the HITL interrupt — check graph state
-                    graph_state = st.session_state.graph.get_state(config)
+                # Check if graph is paused (HITL interrupt) by inspecting graph state
+                graph_state = st.session_state.graph.get_state(config)
 
-                    if graph_state.next:
-                        # Graph is paused — add to active tickets
-                        st.session_state.active_tickets[thread_id] = {
-                            "thread_id": thread_id,
-                            "config": config,
-                            "state": result,
-                            "complaint": complaint_input,
-                            "channel": channel,
-                            "submitted_at": datetime.now(tz=timezone.utc).strftime("%H:%M:%S"),
-                        }
+                if graph_state.next:
+                    # Graph is paused at an interrupt — add to active tickets
+                    st.session_state.active_tickets[thread_id] = {
+                        "thread_id": thread_id,
+                        "config": config,
+                        "state": result,
+                        "complaint": complaint_input,
+                        "channel": channel,
+                        "submitted_at": datetime.now(tz=timezone.utc).strftime("%H:%M:%S"),
+                    }
 
-                        st.session_state.messages.append({
-                            "role": "assistant",
-                            "content": (
-                                f"⏸️ **Ticket Escalated for Review**\n\n"
-                                f"Your ticket has been received and analyzed. Due to our "
-                                f"risk assessment protocols, this case requires manager approval "
-                                f"before we can proceed.\n\n"
-                                f"**Risk Score:** {result.get('risk_score', 'N/A')}\n"
-                                f"**Reasons:** {', '.join(result.get('risk_reasons', ['Under review']))}\n\n"
-                                f"A manager will review your case shortly. Please check the "
-                                f"Operations Panel for updates."
-                            ),
-                        })
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": (
+                            f"⏸️ **Ticket Escalated for Review**\n\n"
+                            f"Your ticket has been received and analyzed. Due to our "
+                            f"risk assessment protocols, this case requires manager approval "
+                            f"before we can proceed.\n\n"
+                            f"**Risk Score:** {result.get('risk_score', 'N/A')}\n"
+                            f"**Reasons:** {', '.join(result.get('risk_reasons', ['Under review']))}\n\n"
+                            f"A manager will review your case shortly. Please check the "
+                            f"Operations Panel for updates."
+                        ),
+                    })
 
-                        logger.info(f"[Frontend] ⏸️ Ticket {thread_id} paused for HITL approval")
-                    else:
-                        # Graph completed normally despite approval flags
-                        _handle_completed_ticket(result, thread_id, complaint_input, channel)
+                    logger.info(f"[Frontend] ⏸️ Ticket {thread_id} paused for HITL approval")
                 else:
                     # Graph completed normally
                     _handle_completed_ticket(result, thread_id, complaint_input, channel)
