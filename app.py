@@ -54,7 +54,7 @@ def init_session_state():
         "graph": None,  # Compiled LangGraph instance
         "checkpointer": None,  # MemorySaver instance
         "processing": False,  # Prevent double-submit
-        "selected_scenario": None,  # Scenario text selected by button
+        "auto_submit_text": None,  # Text to auto-submit from scenario button
     }
     for key, val in defaults.items():
         if key not in st.session_state:
@@ -94,6 +94,104 @@ def _handle_completed_ticket(result: dict, thread_id: str, complaint: str, chann
     })
 
     logger.info(f"[Frontend] ✅ Ticket {thread_id} resolved")
+
+
+def _submit_ticket(complaint_text: str, channel: str):
+    """
+    Core ticket submission logic. Called by both scenario buttons and manual submit.
+    Runs the LangGraph agent pipeline and handles HITL pausing.
+    """
+    if st.session_state.processing:
+        return  # Guard against double-submit
+
+    st.session_state.processing = True
+
+    # Add user message to chat
+    st.session_state.messages.append({
+        "role": "user",
+        "content": f"**[{channel}]** {complaint_text}",
+    })
+
+    # Generate unique thread ID
+    st.session_state.thread_counter += 1
+    thread_id = f"ticket-{st.session_state.thread_counter}-{uuid.uuid4().hex[:6]}"
+
+    # Build initial state
+    initial_state = {
+        "original_complaint": complaint_text,
+        "channel": channel,
+        "customer_id": "",
+        "order_id": "",
+        "tracking_id": "",
+        "customer_email": "",
+        "customer_sentiment": "",
+        "issue_type": "",
+        "risk_score": "",
+        "risk_reasons": [],
+        "approval_required": False,
+        "approval_status": "not_required",
+        "order_details": {},
+        "tracking_details": {},
+        "policy": {},
+        "refund_amount": 0.0,
+        "dispute_filed": False,
+        "steps_taken": [],
+        "internal_notes": [],
+        "final_draft_response": "",
+        "error": "",
+    }
+
+    config = {"configurable": {"thread_id": thread_id}}
+
+    try:
+        result = st.session_state.graph.invoke(initial_state, config=config)
+
+        # Check if graph is paused (HITL interrupt)
+        graph_state = st.session_state.graph.get_state(config)
+
+        if graph_state.next:
+            # Graph is paused at an interrupt — add to active tickets
+            st.session_state.active_tickets[thread_id] = {
+                "thread_id": thread_id,
+                "config": config,
+                "state": result,
+                "complaint": complaint_text,
+                "channel": channel,
+                "submitted_at": datetime.now(tz=timezone.utc).strftime("%H:%M:%S"),
+            }
+
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": (
+                    f"⏸️ **Ticket Escalated for Review**\n\n"
+                    f"Your ticket has been received and analyzed. Due to our "
+                    f"risk assessment protocols, this case requires manager approval "
+                    f"before we can proceed.\n\n"
+                    f"**Risk Score:** {result.get('risk_score', 'N/A')}\n"
+                    f"**Reasons:** {', '.join(result.get('risk_reasons', ['Under review']))}\n\n"
+                    f"A manager will review your case shortly. Please check the "
+                    f"Operations Panel for updates."
+                ),
+            })
+
+            logger.info(f"[Frontend] ⏸️ Ticket {thread_id} paused for HITL approval")
+        else:
+            # Graph completed normally
+            _handle_completed_ticket(result, thread_id, complaint_text, channel)
+
+    except Exception as e:
+        logger.error(f"[Frontend] ❌ Graph execution error: {e}")
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": (
+                f"❌ **Error Processing Ticket**\n\n"
+                f"An error occurred while processing your request: `{str(e)}`\n\n"
+                f"Please ensure the backend API server is running "
+                f"(`python backend.py`) and try again."
+            ),
+        })
+
+    st.session_state.processing = False
 
 
 def _resume_graph(thread_id: str, decision: str):
@@ -446,14 +544,21 @@ with panel_a:
         ),
     }
 
+    # ── Check for auto-submit from scenario button (previous rerun) ─────
+    if st.session_state.auto_submit_text and not st.session_state.processing:
+        auto_text = st.session_state.auto_submit_text
+        st.session_state.auto_submit_text = None  # Clear immediately
+        with st.spinner("🤖 Agent processing your ticket..."):
+            _submit_ticket(auto_text, channel)
+        st.rerun()
+
     scenario_cols = st.columns(2)
 
     for idx, (label, complaint) in enumerate(scenarios.items()):
         col = scenario_cols[idx % 2]
         with col:
             if st.button(label, key=f"scenario_{idx}", use_container_width=True):
-                st.session_state.selected_scenario = complaint
-                st.session_state.complaint_area = complaint
+                st.session_state.auto_submit_text = complaint
                 st.rerun()
 
     # ── Custom Complaint Input ────────────────────────────────────────────
@@ -477,101 +582,13 @@ with panel_a:
         disabled=st.session_state.processing,
     )
 
-    if submit_clicked and complaint_input.strip():
-        st.session_state.processing = True
-
-        # Add user message to chat
-        st.session_state.messages.append({
-            "role": "user",
-            "content": f"**[{channel}]** {complaint_input}",
-        })
-
-        # Generate unique thread ID
-        st.session_state.thread_counter += 1
-        thread_id = f"ticket-{st.session_state.thread_counter}-{uuid.uuid4().hex[:6]}"
-
-        # Build initial state
-        initial_state = {
-            "original_complaint": complaint_input,
-            "channel": channel,
-            "customer_id": "",
-            "order_id": "",
-            "tracking_id": "",
-            "customer_email": "",
-            "customer_sentiment": "",
-            "issue_type": "",
-            "risk_score": "",
-            "risk_reasons": [],
-            "approval_required": False,
-            "approval_status": "not_required",
-            "order_details": {},
-            "tracking_details": {},
-            "policy": {},
-            "refund_amount": 0.0,
-            "dispute_filed": False,
-            "steps_taken": [],
-            "internal_notes": [],
-            "final_draft_response": "",
-            "error": "",
-        }
-
-        config = {"configurable": {"thread_id": thread_id}}
-
-        # Run the graph
-        with st.spinner("🤖 Agent processing your ticket..."):
-            try:
-                result = st.session_state.graph.invoke(initial_state, config=config)
-
-                # Check if graph is paused (HITL interrupt) by inspecting graph state
-                graph_state = st.session_state.graph.get_state(config)
-
-                if graph_state.next:
-                    # Graph is paused at an interrupt — add to active tickets
-                    st.session_state.active_tickets[thread_id] = {
-                        "thread_id": thread_id,
-                        "config": config,
-                        "state": result,
-                        "complaint": complaint_input,
-                        "channel": channel,
-                        "submitted_at": datetime.now(tz=timezone.utc).strftime("%H:%M:%S"),
-                    }
-
-                    st.session_state.messages.append({
-                        "role": "assistant",
-                        "content": (
-                            f"⏸️ **Ticket Escalated for Review**\n\n"
-                            f"Your ticket has been received and analyzed. Due to our "
-                            f"risk assessment protocols, this case requires manager approval "
-                            f"before we can proceed.\n\n"
-                            f"**Risk Score:** {result.get('risk_score', 'N/A')}\n"
-                            f"**Reasons:** {', '.join(result.get('risk_reasons', ['Under review']))}\n\n"
-                            f"A manager will review your case shortly. Please check the "
-                            f"Operations Panel for updates."
-                        ),
-                    })
-
-                    logger.info(f"[Frontend] ⏸️ Ticket {thread_id} paused for HITL approval")
-                else:
-                    # Graph completed normally
-                    _handle_completed_ticket(result, thread_id, complaint_input, channel)
-
-            except Exception as e:
-                logger.error(f"[Frontend] ❌ Graph execution error: {e}")
-                st.session_state.messages.append({
-                    "role": "assistant",
-                    "content": (
-                        f"❌ **Error Processing Ticket**\n\n"
-                        f"An error occurred while processing your request: `{str(e)}`\n\n"
-                        f"Please ensure the backend API server is running "
-                        f"(`python backend.py`) and try again."
-                    ),
-                })
-
-        st.session_state.processing = False
-        st.rerun()
-
-    elif submit_clicked and not complaint_input.strip():
-        st.warning("⚠️ Please enter a complaint message before submitting.")
+    if submit_clicked:
+        if complaint_input.strip():
+            with st.spinner("🤖 Agent processing your ticket..."):
+                _submit_ticket(complaint_input.strip(), channel)
+            st.rerun()
+        else:
+            st.warning("⚠️ Please enter a complaint message before submitting.")
 
     # ── Chat History Display ──────────────────────────────────────────────
     st.markdown('<hr class="divider">', unsafe_allow_html=True)
